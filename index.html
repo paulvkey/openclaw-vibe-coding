@@ -1,24 +1,65 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>贪吃蛇 🐍</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0e1a" />
+<title>Neon Snake</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div class="game-container">
-    <h1>🐍 贪吃蛇</h1>
-    <div class="score-board">
-      <span>分数: <span id="score">0</span></span>
-      <span>最高分: <span id="highScore">0</span></span>
-    </div>
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div class="controls">
-      <p class="controls-hint">方向键 / WASD 控制移动 · 空格重新开始</p>
-      <button id="restartBtn">🔄 重新开始</button>
-    </div>
+  <div class="background">
+    <div class="grid-overlay"></div>
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
   </div>
+
+  <main class="game-shell">
+    <header class="game-header">
+      <h1 class="title">
+        <span class="title-neon">NEON</span>
+        <span class="title-snake">SNAKE</span>
+      </h1>
+      <div class="scores">
+        <div class="score-card">
+          <span class="score-label">SCORE</span>
+          <span class="score-value" id="score">0</span>
+        </div>
+        <div class="score-card best">
+          <span class="score-label">BEST</span>
+          <span class="score-value" id="highScore">0</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="board-wrap">
+      <canvas id="board" width="480" height="480" aria-label="Snake game board"></canvas>
+
+      <div class="overlay" id="overlay">
+        <div class="overlay-card" id="overlayCard">
+          <h2 class="overlay-title" id="overlayTitle">Ready?</h2>
+          <p class="overlay-text" id="overlayText">
+            Use <kbd>arrows</kbd> / <kbd>WASD</kbd> to move<br />
+            <kbd>Space</kbd> to pause or restart
+          </p>
+          <button class="btn primary" id="startBtn">Start Game</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="controls">
+      <button class="btn ghost" id="pauseBtn" aria-label="Pause">Pause</button>
+      <button class="btn ghost" id="restartBtn" aria-label="Restart">Restart</button>
+    </footer>
+
+    <div class="touch-pad" id="touchPad" aria-hidden="true">
+      <button class="dpad up" data-dir="up" aria-label="Up">&#9650;</button>
+      <button class="dpad left" data-dir="left" aria-label="Left">&#9664;</button>
+      <button class="dpad right" data-dir="right" aria-label="Right">&#9654;</button>
+      <button class="dpad down" data-dir="down" aria-label="Down">&#9660;</button>
+    </div>
+  </main>
+
   <script src="game.js"></script>
 </body>
 </html>

@@ -1,27 +1,51 @@
-# 🐍 贪吃蛇 (Snake Game)
+# Neon Snake
 
-一个经典的贪吃蛇网页游戏，使用原生 HTML + CSS + JavaScript 编写。
+A polished, dark-themed take on the classic Snake game. Built with vanilla HTML, CSS, and JavaScript — no frameworks, no build step. Just open `index.html` and play.
 
-## 玩法
+## Features
 
-- **方向键 / WASD** — 控制蛇的移动方向
-- **空格键** — 游戏结束后重新开始
-- 吃掉红色食物来增加分数和长度
-- 撞墙或撞到自己则游戏结束
-- 最高分自动保存在浏览器本地存储中
+- **Smooth gameplay** — fixed-tick logic with interpolated rendering for buttery motion
+- **Neon visuals** — gradient snake body, glowing food, animated background, soft grid
+- **Score tracking** — current score and best score persisted in `localStorage`
+- **Progressive difficulty** — speed increases every 5 points
+- **Multi-input** — arrow keys, WASD, on-screen D-pad, and swipe gestures
+- **Mobile-ready** — responsive layout, touch controls, viewport-aware sizing
+- **Pause / resume** — auto-pauses when the tab loses focus
+- **Crisp on retina** — DPR-aware canvas scaling
 
-## 特性
+## How to play
 
-- 深色主题，视觉风格精致
-- 蛇身渐变颜色
-- 食物脉冲动画
-- 分数越高速度越快
-- 最高分持久化保存
+| Action          | Keyboard                | Touch                   |
+| --------------- | ----------------------- | ----------------------- |
+| Move            | Arrow keys / WASD       | Swipe or D-pad          |
+| Pause / resume  | Space                   | Pause button            |
+| Restart         | Space (after game over) | Restart / Play Again    |
 
-## 快速开始
+Eat the glowing pink orbs to grow longer and score points. Don't hit the walls — and don't bite yourself. Every 5 points the snake gets a little faster.
 
-直接用浏览器打开 `index.html` 即可开始游戏。
+## Run it locally
 
-```
+```bash
+git clone git@github.com:paulvkey/openclaw-vibe-coding.git
+cd openclaw-vibe-coding
 open index.html
 ```
+
+Or serve it with anything that speaks HTTP, e.g.:
+
+```bash
+python3 -m http.server 8000
+# then visit http://localhost:8000
+```
+
+## Files
+
+```
+index.html   — markup and game shell
+style.css    — dark-theme styling, glow effects, responsive rules
+game.js      — game loop, rendering, input handling
+```
+
+## License
+
+MIT
