@@ -1,442 +1,704 @@
 (() => {
-  'use strict';
+  "use strict";
 
-  const COLS = 24;
-  const ROWS = 24;
-  const BASE_TICK_MS = 130;
-  const MIN_TICK_MS = 55;
-  const STORAGE_KEY = 'neon-snake-high-score';
+  const COLS = 10;
+  const ROWS = 20;
+  const CELL = 30;
+  const PREVIEW_CELL = 24;
+  const STORAGE_KEY = "neon-tetris-best";
 
-  const canvas = document.getElementById('board');
-  const ctx = canvas.getContext('2d');
-  const scoreEl = document.getElementById('score');
-  const highScoreEl = document.getElementById('highScore');
-  const overlay = document.getElementById('overlay');
-  const overlayTitle = document.getElementById('overlayTitle');
-  const overlayText = document.getElementById('overlayText');
-  const startBtn = document.getElementById('startBtn');
-  const pauseBtn = document.getElementById('pauseBtn');
-  const restartBtn = document.getElementById('restartBtn');
-  const touchPad = document.getElementById('touchPad');
-  const scoreCard = scoreEl.parentElement;
-  const bestCard = highScoreEl.parentElement;
-
-  let cellSize = 0;
-  function fitCanvas() {
-    const rect = canvas.getBoundingClientRect();
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    canvas.width = Math.round(rect.width * dpr);
-    canvas.height = Math.round(rect.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    cellSize = rect.width / COLS;
-  }
-  window.addEventListener('resize', () => { fitCanvas(); draw(); });
-
-  const STATE = { READY: 'ready', RUNNING: 'running', PAUSED: 'paused', OVER: 'over' };
-
-  const game = {
-    snake: [],
-    dir: { x: 1, y: 0 },
-    nextDir: { x: 1, y: 0 },
-    food: null,
-    score: 0,
-    highScore: Number(localStorage.getItem(STORAGE_KEY)) || 0,
-    state: STATE.READY,
-    tickMs: BASE_TICK_MS,
-    lastTickAt: 0,
-    rafId: null,
-    tween: 0,
-    foodPulse: 0,
-    deathFlash: 0,
+  const TETROMINOES = {
+    I: {
+      color: "#00f0ff",
+      shapes: [
+        [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+        [[0,0,1,0],[0,0,1,0],[0,0,1,0],[0,0,1,0]],
+        [[0,0,0,0],[0,0,0,0],[1,1,1,1],[0,0,0,0]],
+        [[0,1,0,0],[0,1,0,0],[0,1,0,0],[0,1,0,0]],
+      ],
+    },
+    O: {
+      color: "#ffe629",
+      shapes: [
+        [[1,1],[1,1]],
+        [[1,1],[1,1]],
+        [[1,1],[1,1]],
+        [[1,1],[1,1]],
+      ],
+    },
+    T: {
+      color: "#b94dff",
+      shapes: [
+        [[0,1,0],[1,1,1],[0,0,0]],
+        [[0,1,0],[0,1,1],[0,1,0]],
+        [[0,0,0],[1,1,1],[0,1,0]],
+        [[0,1,0],[1,1,0],[0,1,0]],
+      ],
+    },
+    S: {
+      color: "#39ff14",
+      shapes: [
+        [[0,1,1],[1,1,0],[0,0,0]],
+        [[0,1,0],[0,1,1],[0,0,1]],
+        [[0,0,0],[0,1,1],[1,1,0]],
+        [[1,0,0],[1,1,0],[0,1,0]],
+      ],
+    },
+    Z: {
+      color: "#ff3860",
+      shapes: [
+        [[1,1,0],[0,1,1],[0,0,0]],
+        [[0,0,1],[0,1,1],[0,1,0]],
+        [[0,0,0],[1,1,0],[0,1,1]],
+        [[0,1,0],[1,1,0],[1,0,0]],
+      ],
+    },
+    J: {
+      color: "#2979ff",
+      shapes: [
+        [[1,0,0],[1,1,1],[0,0,0]],
+        [[0,1,1],[0,1,0],[0,1,0]],
+        [[0,0,0],[1,1,1],[0,0,1]],
+        [[0,1,0],[0,1,0],[1,1,0]],
+      ],
+    },
+    L: {
+      color: "#ff9a1f",
+      shapes: [
+        [[0,0,1],[1,1,1],[0,0,0]],
+        [[0,1,0],[0,1,0],[0,1,1]],
+        [[0,0,0],[1,1,1],[1,0,0]],
+        [[1,1,0],[0,1,0],[0,1,0]],
+      ],
+    },
   };
 
-  highScoreEl.textContent = game.highScore;
+  const PIECE_TYPES = Object.keys(TETROMINOES);
 
-  function reset() {
-    const cx = Math.floor(COLS / 2);
-    const cy = Math.floor(ROWS / 2);
-    game.snake = [
-      { x: cx,     y: cy },
-      { x: cx - 1, y: cy },
-      { x: cx - 2, y: cy },
-    ];
-    game.dir = { x: 1, y: 0 };
-    game.nextDir = { x: 1, y: 0 };
-    game.score = 0;
-    game.tickMs = BASE_TICK_MS;
-    game.tween = 0;
-    game.deathFlash = 0;
-    placeFood();
-    updateScore(false);
-  }
+  const SCORE_TABLE = [0, 100, 300, 500, 800];
 
-  function placeFood() {
-    const occupied = new Set(game.snake.map(s => s.x + ',' + s.y));
-    const free = [];
+  const board = document.getElementById("board");
+  const ctx = board.getContext("2d");
+  const nextCanvas = document.getElementById("nextCanvas");
+  const nextCtx = nextCanvas.getContext("2d");
+  const holdCanvas = document.getElementById("holdCanvas");
+  const holdCtx = holdCanvas.getContext("2d");
+
+  const scoreEl = document.getElementById("score");
+  const highEl = document.getElementById("highScore");
+  const levelEl = document.getElementById("level");
+  const linesEl = document.getElementById("lines");
+
+  const overlay = document.getElementById("overlay");
+  const overlayCard = document.getElementById("overlayCard");
+  const overlayTitle = document.getElementById("overlayTitle");
+  const overlayText = document.getElementById("overlayText");
+  const startBtn = document.getElementById("startBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const restartBtn = document.getElementById("restartBtn");
+  const boardWrap = document.querySelector(".board-wrap");
+  const touchPad = document.getElementById("touchPad");
+
+  const state = {
+    grid: createGrid(),
+    current: null,
+    next: null,
+    hold: null,
+    canHold: true,
+    bag: [],
+    score: 0,
+    high: parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10) || 0,
+    level: 1,
+    lines: 0,
+    dropTimer: 0,
+    dropInterval: 1000,
+    lastFrame: 0,
+    running: false,
+    paused: false,
+    gameOver: false,
+    flashRows: [],
+    flashTimer: 0,
+  };
+
+  function createGrid() {
+    const grid = [];
     for (let y = 0; y < ROWS; y++) {
-      for (let x = 0; x < COLS; x++) {
-        if (!occupied.has(x + ',' + y)) free.push({ x, y });
-      }
+      grid.push(new Array(COLS).fill(null));
     }
-    game.food = free.length ? free[Math.floor(Math.random() * free.length)] : null;
+    return grid;
   }
 
-  function setDir(x, y) {
-    if (game.state !== STATE.RUNNING && game.state !== STATE.READY) return;
-    if (x === -game.dir.x && y === -game.dir.y) return;
-    if (x === game.dir.x && y === game.dir.y) return;
-    game.nextDir = { x, y };
+  function refillBag() {
+    const bag = PIECE_TYPES.slice();
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+    state.bag.push(...bag);
   }
 
-  function step() {
-    game.dir = game.nextDir;
-    const head = game.snake[0];
-    const newHead = { x: head.x + game.dir.x, y: head.y + game.dir.y };
+  function nextType() {
+    if (state.bag.length === 0) refillBag();
+    return state.bag.shift();
+  }
 
-    if (newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS) {
-      return gameOver();
+  function makePiece(type) {
+    const def = TETROMINOES[type];
+    const shape = def.shapes[0];
+    const x = Math.floor((COLS - shape.length) / 2);
+    return { type, color: def.color, rotation: 0, x, y: -getTopOffset(shape) };
+  }
+
+  function getTopOffset(shape) {
+    for (let r = 0; r < shape.length; r++) {
+      if (shape[r].some(v => v)) return r;
     }
-    for (let i = 0; i < game.snake.length - 1; i++) {
-      if (game.snake[i].x === newHead.x && game.snake[i].y === newHead.y) {
-        return gameOver();
+    return 0;
+  }
+
+  function getShape(piece) {
+    return TETROMINOES[piece.type].shapes[piece.rotation];
+  }
+
+  function collides(piece, dx = 0, dy = 0, rotation = piece.rotation) {
+    const shape = TETROMINOES[piece.type].shapes[rotation];
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
+        const nx = piece.x + c + dx;
+        const ny = piece.y + r + dy;
+        if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+        if (ny >= 0 && state.grid[ny][nx]) return true;
       }
     }
+    return false;
+  }
 
-    game.snake.unshift(newHead);
-
-    if (game.food && newHead.x === game.food.x && newHead.y === game.food.y) {
-      game.score += 1;
-      updateScore(true);
-      if (game.score % 5 === 0) {
-        game.tickMs = Math.max(MIN_TICK_MS, game.tickMs - 8);
+  function rotate(dir = 1) {
+    if (!state.current) return;
+    const p = state.current;
+    const newRot = (p.rotation + dir + 4) % 4;
+    const kicks = [0, -1, 1, -2, 2];
+    for (const k of kicks) {
+      if (!collides(p, k, 0, newRot)) {
+        p.x += k;
+        p.rotation = newRot;
+        return;
       }
-      placeFood();
+    }
+  }
+
+  function move(dx) {
+    if (!state.current) return;
+    if (!collides(state.current, dx, 0)) state.current.x += dx;
+  }
+
+  function softDrop() {
+    if (!state.current) return false;
+    if (!collides(state.current, 0, 1)) {
+      state.current.y += 1;
+      state.score += 1;
+      updateHud();
+      return true;
+    }
+    lockPiece();
+    return false;
+  }
+
+  function hardDrop() {
+    if (!state.current) return;
+    let dist = 0;
+    while (!collides(state.current, 0, 1)) {
+      state.current.y += 1;
+      dist += 1;
+    }
+    state.score += dist * 2;
+    lockPiece();
+  }
+
+  function lockPiece() {
+    const p = state.current;
+    const shape = getShape(p);
+    let topOut = false;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (!shape[r][c]) continue;
+        const x = p.x + c;
+        const y = p.y + r;
+        if (y < 0) {
+          topOut = true;
+          continue;
+        }
+        state.grid[y][x] = p.color;
+      }
+    }
+    state.current = null;
+
+    if (topOut) {
+      endGame();
+      return;
+    }
+
+    const cleared = clearLines();
+    if (cleared > 0) {
+      state.score += SCORE_TABLE[cleared] * state.level;
+      state.lines += cleared;
+      const newLevel = Math.floor(state.lines / 10) + 1;
+      if (newLevel !== state.level) {
+        state.level = newLevel;
+        state.dropInterval = Math.max(80, 1000 - (state.level - 1) * 80);
+      }
+      flashBoard();
+    }
+
+    if (state.score > state.high) {
+      state.high = state.score;
+      localStorage.setItem(STORAGE_KEY, String(state.high));
+    }
+
+    updateHud();
+    spawn();
+    state.canHold = true;
+  }
+
+  function clearLines() {
+    let cleared = 0;
+    for (let y = ROWS - 1; y >= 0; y--) {
+      if (state.grid[y].every(v => v !== null)) {
+        state.grid.splice(y, 1);
+        state.grid.unshift(new Array(COLS).fill(null));
+        cleared += 1;
+        y += 1;
+      }
+    }
+    return cleared;
+  }
+
+  function spawn() {
+    if (!state.next) state.next = makePiece(nextType());
+    state.current = state.next;
+    state.next = makePiece(nextType());
+    if (collides(state.current, 0, 0)) {
+      endGame();
+      return;
+    }
+    drawNext();
+  }
+
+  function holdPiece() {
+    if (!state.current || !state.canHold) return;
+    const curType = state.current.type;
+    if (state.hold) {
+      const swapType = state.hold;
+      state.hold = curType;
+      state.current = makePiece(swapType);
     } else {
-      game.snake.pop();
+      state.hold = curType;
+      state.current = state.next;
+      state.next = makePiece(nextType());
+      drawNext();
     }
+    state.canHold = false;
+    drawHold();
   }
 
-  function updateScore(bump) {
-    scoreEl.textContent = game.score;
-    if (bump) {
-      scoreCard.classList.remove('bump');
-      void scoreCard.offsetWidth;
-      scoreCard.classList.add('bump');
-    }
-    if (game.score > game.highScore) {
-      game.highScore = game.score;
-      highScoreEl.textContent = game.highScore;
-      localStorage.setItem(STORAGE_KEY, String(game.highScore));
-      if (bump) {
-        bestCard.classList.remove('bump');
-        void bestCard.offsetWidth;
-        bestCard.classList.add('bump');
-      }
-    }
+  function ghostY(piece) {
+    let dy = 0;
+    while (!collides(piece, 0, dy + 1)) dy += 1;
+    return piece.y + dy;
   }
 
-  function gameOver() {
-    game.state = STATE.OVER;
-    game.deathFlash = 1;
-    const newBest = game.score === game.highScore && game.score > 0;
-    showOverlay(
-      'Game Over',
-      'You scored <strong>' + game.score + '</strong>' + (newBest ? ' &mdash; new best!' : '') +
-      '<br /><br />Press <kbd>Space</kbd> or tap below to play again',
-      'Play Again',
-      true
-    );
-  }
+  function drawCell(c, x, y, color, opts = {}) {
+    const px = x * CELL;
+    const py = y * CELL;
+    const size = CELL;
+    const inner = opts.inner ?? 2;
 
-  function showOverlay(title, html, btnLabel, isOver) {
-    overlayTitle.textContent = title;
-    overlayTitle.classList.toggle('gameover', !!isOver);
-    overlayText.innerHTML = html;
-    startBtn.textContent = btnLabel;
-    overlay.classList.remove('hidden');
-  }
-  function hideOverlay() {
-    overlay.classList.add('hidden');
-  }
-
-  function startGame() {
-    if (game.state === STATE.OVER || game.state === STATE.READY) {
-      reset();
+    if (opts.ghost) {
+      c.save();
+      c.globalAlpha = 0.22;
+      c.strokeStyle = color;
+      c.lineWidth = 2;
+      c.strokeRect(px + inner, py + inner, size - inner * 2, size - inner * 2);
+      c.fillStyle = color;
+      c.globalAlpha = 0.08;
+      c.fillRect(px + inner, py + inner, size - inner * 2, size - inner * 2);
+      c.restore();
+      return;
     }
-    game.state = STATE.RUNNING;
-    game.lastTickAt = performance.now();
-    hideOverlay();
+
+    const grad = c.createLinearGradient(px, py, px + size, py + size);
+    grad.addColorStop(0, lighten(color, 0.35));
+    grad.addColorStop(1, color);
+
+    c.save();
+    c.shadowColor = color;
+    c.shadowBlur = opts.glow ?? 14;
+    c.fillStyle = grad;
+    roundRect(c, px + inner, py + inner, size - inner * 2, size - inner * 2, 5);
+    c.fill();
+    c.restore();
+
+    c.save();
+    c.strokeStyle = lighten(color, 0.55);
+    c.lineWidth = 1.5;
+    roundRect(c, px + inner + 1, py + inner + 1, size - inner * 2 - 2, size - inner * 2 - 2, 4);
+    c.stroke();
+    c.restore();
+
+    c.save();
+    c.globalAlpha = 0.4;
+    c.fillStyle = "#ffffff";
+    c.fillRect(px + inner + 4, py + inner + 4, size - inner * 2 - 10, 3);
+    c.restore();
   }
 
-  function togglePause() {
-    if (game.state === STATE.RUNNING) {
-      game.state = STATE.PAUSED;
-      showOverlay('Paused', 'Press <kbd>Space</kbd> to resume', 'Resume', false);
-    } else if (game.state === STATE.PAUSED) {
-      startGame();
-    } else if (game.state === STATE.OVER || game.state === STATE.READY) {
-      startGame();
+  function roundRect(c, x, y, w, h, r) {
+    if (w <= 0 || h <= 0) return;
+    const rr = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + rr, y);
+    c.arcTo(x + w, y, x + w, y + h, rr);
+    c.arcTo(x + w, y + h, x, y + h, rr);
+    c.arcTo(x, y + h, x, y, rr);
+    c.arcTo(x, y, x + w, y, rr);
+    c.closePath();
+  }
+
+  function lighten(hex, amount) {
+    const m = hex.replace("#", "");
+    const num = parseInt(m, 16);
+    let r = (num >> 16) & 255;
+    let g = (num >> 8) & 255;
+    let b = num & 255;
+    r = Math.round(r + (255 - r) * amount);
+    g = Math.round(g + (255 - g) * amount);
+    b = Math.round(b + (255 - b) * amount);
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  function drawGrid() {
+    ctx.save();
+    ctx.strokeStyle = "rgba(0, 240, 255, 0.05)";
+    ctx.lineWidth = 1;
+    for (let x = 1; x < COLS; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * CELL + 0.5, 0);
+      ctx.lineTo(x * CELL + 0.5, ROWS * CELL);
+      ctx.stroke();
     }
+    for (let y = 1; y < ROWS; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, y * CELL + 0.5);
+      ctx.lineTo(COLS * CELL, y * CELL + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function draw() {
-    const w = canvas.getBoundingClientRect().width;
-    const h = canvas.getBoundingClientRect().height;
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, board.width, board.height);
+    drawGrid();
 
-    drawGrid(w, h);
-    drawFood();
-    drawSnake();
-
-    if (game.deathFlash > 0) {
-      ctx.fillStyle = 'rgba(255, 77, 109, ' + (game.deathFlash * 0.35) + ')';
-      ctx.fillRect(0, 0, w, h);
-      game.deathFlash = Math.max(0, game.deathFlash - 0.04);
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        const v = state.grid[y][x];
+        if (v) drawCell(ctx, x, y, v);
+      }
     }
-  }
 
-  function drawGrid(w, h) {
-    ctx.save();
-    ctx.strokeStyle = 'rgba(94, 234, 212, 0.05)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < COLS; i++) {
-      const x = Math.round(i * cellSize) + 0.5;
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    if (state.flashRows.length > 0 && state.flashTimer > 0) {
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 255, 255, ${state.flashTimer / 200})`;
+      for (const r of state.flashRows) {
+        ctx.fillRect(0, r * CELL, COLS * CELL, CELL);
+      }
+      ctx.restore();
     }
-    for (let i = 1; i < ROWS; i++) {
-      const y = Math.round(i * cellSize) + 0.5;
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
-    ctx.restore();
-  }
 
-  function drawFood() {
-    if (!game.food) return;
-    const cx = (game.food.x + 0.5) * cellSize;
-    const cy = (game.food.y + 0.5) * cellSize;
-    const baseR = cellSize * 0.32;
-    const pulse = baseR + Math.sin(game.foodPulse) * cellSize * 0.06;
-
-    ctx.save();
-    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, cellSize * 1.4);
-    glow.addColorStop(0, 'rgba(244, 114, 182, 0.55)');
-    glow.addColorStop(0.5, 'rgba(244, 114, 182, 0.18)');
-    glow.addColorStop(1, 'rgba(244, 114, 182, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(cx - cellSize * 1.5, cy - cellSize * 1.5, cellSize * 3, cellSize * 3);
-
-    const grad = ctx.createRadialGradient(cx - pulse * 0.3, cy - pulse * 0.3, 0, cx, cy, pulse);
-    grad.addColorStop(0, '#ffe0f1');
-    grad.addColorStop(0.5, '#f472b6');
-    grad.addColorStop(1, '#be185d');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.beginPath();
-    ctx.arc(cx - pulse * 0.35, cy - pulse * 0.35, pulse * 0.22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawSnake() {
-    const t = game.state === STATE.RUNNING ? game.tween : 1;
-    const offX = (game.dir.x * (1 - t)) * cellSize;
-    const offY = (game.dir.y * (1 - t)) * cellSize;
-    const len = game.snake.length;
-
-    for (let i = len - 1; i >= 0; i--) {
-      const seg = game.snake[i];
-      let x = seg.x * cellSize;
-      let y = seg.y * cellSize;
-      if (i === 0) { x -= offX; y -= offY; }
-      else if (i === len - 1 && len > 1) {
-        const next = game.snake[i - 1];
-        const dx = seg.x - next.x;
-        const dy = seg.y - next.y;
-        x -= dx * (1 - t) * cellSize;
-        y -= dy * (1 - t) * cellSize;
+    if (state.current && !state.gameOver) {
+      const gy = ghostY(state.current);
+      const shape = getShape(state.current);
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (!shape[r][c]) continue;
+          const x = state.current.x + c;
+          const y = gy + r;
+          if (y >= 0) drawCell(ctx, x, y, state.current.color, { ghost: true });
+        }
       }
 
-      const ratio = i / Math.max(1, len - 1);
-      drawSegment(x, y, cellSize, ratio, i === 0);
+      for (let r = 0; r < shape.length; r++) {
+        for (let c = 0; c < shape[r].length; c++) {
+          if (!shape[r][c]) continue;
+          const x = state.current.x + c;
+          const y = state.current.y + r;
+          if (y >= 0) drawCell(ctx, x, y, state.current.color, { glow: 18 });
+        }
+      }
     }
   }
 
-  function drawSegment(x, y, size, ratio, isHead) {
-    const pad = size * 0.08;
-    const sz = size - pad * 2;
-    const r = sz * 0.28;
-
-    const headColor = '#5eead4';
-    const tailColor = '#38bdf8';
-    const color = lerpColor(headColor, tailColor, ratio);
-
-    ctx.save();
-    if (isHead) {
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = 'rgba(94, 234, 212, 0.65)';
+  function drawPreview(c, canvas, type) {
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    if (!type) return;
+    const def = TETROMINOES[type];
+    const shape = def.shapes[0];
+    const cells = [];
+    for (let r = 0; r < shape.length; r++) {
+      for (let col = 0; col < shape[r].length; col++) {
+        if (shape[r][col]) cells.push([col, r]);
+      }
     }
+    if (cells.length === 0) return;
+    const xs = cells.map(p => p[0]);
+    const ys = cells.map(p => p[1]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const w = maxX - minX + 1;
+    const h = maxY - minY + 1;
+    const offX = (canvas.width - w * PREVIEW_CELL) / 2 - minX * PREVIEW_CELL;
+    const offY = (canvas.height - h * PREVIEW_CELL) / 2 - minY * PREVIEW_CELL;
 
-    const grad = ctx.createLinearGradient(x, y, x + size, y + size);
-    grad.addColorStop(0, lighten(color, 0.18));
-    grad.addColorStop(1, color);
-    ctx.fillStyle = grad;
-    roundRect(ctx, x + pad, y + pad, sz, sz, r);
-    ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-    roundRect(ctx, x + pad + sz * 0.18, y + pad + sz * 0.12, sz * 0.5, sz * 0.18, r * 0.6);
-    ctx.fill();
-
-    if (isHead) {
-      drawSnakeEyes(x, y, size);
+    for (const [cx, cy] of cells) {
+      const px = offX + cx * PREVIEW_CELL;
+      const py = offY + cy * PREVIEW_CELL;
+      const grad = c.createLinearGradient(px, py, px + PREVIEW_CELL, py + PREVIEW_CELL);
+      grad.addColorStop(0, lighten(def.color, 0.35));
+      grad.addColorStop(1, def.color);
+      c.save();
+      c.shadowColor = def.color;
+      c.shadowBlur = 12;
+      c.fillStyle = grad;
+      roundRect(c, px + 2, py + 2, PREVIEW_CELL - 4, PREVIEW_CELL - 4, 4);
+      c.fill();
+      c.restore();
     }
-    ctx.restore();
   }
 
-  function drawSnakeEyes(x, y, size) {
-    const dir = game.dir;
-    const cx = x + size / 2;
-    const cy = y + size / 2;
-    const off = size * 0.18;
-    const eyeR = size * 0.09;
+  function drawNext() {
+    drawPreview(nextCtx, nextCanvas, state.next ? state.next.type : null);
+  }
 
-    let e1, e2;
-    if (dir.x !== 0) {
-      const fx = cx + dir.x * size * 0.18;
-      e1 = { x: fx, y: cy - off };
-      e2 = { x: fx, y: cy + off };
+  function drawHold() {
+    drawPreview(holdCtx, holdCanvas, state.hold);
+  }
+
+  function updateHud() {
+    scoreEl.textContent = state.score;
+    highEl.textContent = state.high;
+    levelEl.textContent = state.level;
+    linesEl.textContent = state.lines;
+  }
+
+  function flashBoard() {
+    if (boardWrap.classList.contains("flash")) {
+      boardWrap.classList.remove("flash");
+      void boardWrap.offsetWidth;
+    }
+    boardWrap.classList.add("flash");
+    setTimeout(() => boardWrap.classList.remove("flash"), 220);
+  }
+
+  function showOverlay(title, text, btnLabel, mode) {
+    overlayCard.classList.remove("gameover", "paused");
+    if (mode) overlayCard.classList.add(mode);
+    overlayTitle.textContent = title;
+    overlayText.innerHTML = text;
+    startBtn.textContent = btnLabel;
+    overlay.classList.remove("hidden");
+  }
+
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+  }
+
+  function startGame() {
+    state.grid = createGrid();
+    state.bag = [];
+    state.current = null;
+    state.next = makePiece(nextType());
+    state.hold = null;
+    state.canHold = true;
+    state.score = 0;
+    state.lines = 0;
+    state.level = 1;
+    state.dropInterval = 1000;
+    state.dropTimer = 0;
+    state.running = true;
+    state.paused = false;
+    state.gameOver = false;
+    state.flashRows = [];
+    state.flashTimer = 0;
+    spawn();
+    drawHold();
+    updateHud();
+    hideOverlay();
+    state.lastFrame = performance.now();
+    requestAnimationFrame(loop);
+  }
+
+  function pauseGame() {
+    if (!state.running || state.gameOver) return;
+    state.paused = !state.paused;
+    if (state.paused) {
+      showOverlay(
+        "已暂停",
+        "按 <kbd>P</kbd> 或点击按钮继续",
+        "继续",
+        "paused"
+      );
     } else {
-      const fy = cy + dir.y * size * 0.18;
-      e1 = { x: cx - off, y: fy };
-      e2 = { x: cx + off, y: fy };
+      hideOverlay();
+      state.lastFrame = performance.now();
+      requestAnimationFrame(loop);
     }
-
-    ctx.fillStyle = '#06121a';
-    ctx.beginPath(); ctx.arc(e1.x, e1.y, eyeR, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(e2.x, e2.y, eyeR, 0, Math.PI * 2); ctx.fill();
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-    ctx.beginPath(); ctx.arc(e1.x + eyeR * 0.25, e1.y - eyeR * 0.25, eyeR * 0.35, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(e2.x + eyeR * 0.25, e2.y - eyeR * 0.25, eyeR * 0.35, 0, Math.PI * 2); ctx.fill();
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
-    const rr = Math.min(r, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + rr, y);
-    ctx.arcTo(x + w, y,     x + w, y + h, rr);
-    ctx.arcTo(x + w, y + h, x,     y + h, rr);
-    ctx.arcTo(x,     y + h, x,     y,     rr);
-    ctx.arcTo(x,     y,     x + w, y,     rr);
-    ctx.closePath();
-  }
-
-  function lerpColor(a, b, t) {
-    const ca = hexToRgb(a);
-    const cb = hexToRgb(b);
-    const r = Math.round(ca.r + (cb.r - ca.r) * t);
-    const g = Math.round(ca.g + (cb.g - ca.g) * t);
-    const bl = Math.round(ca.b + (cb.b - ca.b) * t);
-    return 'rgb(' + r + ', ' + g + ', ' + bl + ')';
-  }
-  function lighten(rgb, amt) {
-    const m = rgb.match(/\d+/g);
-    if (!m) return rgb;
-    const r = Math.min(255, Math.round(+m[0] + (255 - +m[0]) * amt));
-    const g = Math.min(255, Math.round(+m[1] + (255 - +m[1]) * amt));
-    const b = Math.min(255, Math.round(+m[2] + (255 - +m[2]) * amt));
-    return 'rgb(' + r + ', ' + g + ', ' + b + ')';
-  }
-  function hexToRgb(hex) {
-    const v = hex.replace('#', '');
-    return { r: parseInt(v.slice(0, 2), 16), g: parseInt(v.slice(2, 4), 16), b: parseInt(v.slice(4, 6), 16) };
+  function endGame() {
+    state.running = false;
+    state.gameOver = true;
+    if (state.score > state.high) {
+      state.high = state.score;
+      localStorage.setItem(STORAGE_KEY, String(state.high));
+    }
+    updateHud();
+    showOverlay(
+      "游戏结束",
+      `本局得分 <strong style="color:var(--neon-cyan)">${state.score}</strong><br />消除行数 ${state.lines} · 等级 ${state.level}`,
+      "再来一局",
+      "gameover"
+    );
   }
 
   function loop(now) {
-    game.foodPulse += 0.08;
-    if (game.state === STATE.RUNNING) {
-      const elapsed = now - game.lastTickAt;
-      game.tween = Math.min(1, elapsed / game.tickMs);
-      if (elapsed >= game.tickMs) {
-        step();
-        game.lastTickAt = now;
-        game.tween = 0;
+    if (!state.running || state.paused) return;
+    const dt = now - state.lastFrame;
+    state.lastFrame = now;
+    state.dropTimer += dt;
+    if (state.flashTimer > 0) state.flashTimer = Math.max(0, state.flashTimer - dt);
+
+    if (state.dropTimer >= state.dropInterval) {
+      state.dropTimer = 0;
+      if (state.current && !collides(state.current, 0, 1)) {
+        state.current.y += 1;
+      } else if (state.current) {
+        lockPiece();
       }
     }
+
     draw();
-    game.rafId = requestAnimationFrame(loop);
+    if (state.running && !state.paused) requestAnimationFrame(loop);
   }
 
-  const keyMap = {
-    ArrowUp: [0, -1], KeyW: [0, -1],
-    ArrowDown: [0, 1], KeyS: [0, 1],
-    ArrowLeft: [-1, 0], KeyA: [-1, 0],
-    ArrowRight: [1, 0], KeyD: [1, 0],
-  };
+  document.addEventListener("keydown", (e) => {
+    if (!state.running && (e.key === "Enter" || e.key === " ")) {
+      if (state.gameOver || !state.running) {
+        e.preventDefault();
+        startGame();
+        return;
+      }
+    }
+    if (!state.running || state.gameOver) return;
 
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
+    if (e.key === "p" || e.key === "P") {
       e.preventDefault();
-      togglePause();
+      pauseGame();
       return;
     }
-    const dir = keyMap[e.code];
-    if (dir) {
-      e.preventDefault();
-      if (game.state === STATE.READY) startGame();
-      setDir(dir[0], dir[1]);
+    if (state.paused) return;
+
+    switch (e.key) {
+      case "ArrowLeft":
+        e.preventDefault();
+        move(-1);
+        draw();
+        break;
+      case "ArrowRight":
+        e.preventDefault();
+        move(1);
+        draw();
+        break;
+      case "ArrowUp":
+      case "x":
+      case "X":
+        e.preventDefault();
+        rotate(1);
+        draw();
+        break;
+      case "z":
+      case "Z":
+        e.preventDefault();
+        rotate(-1);
+        draw();
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        softDrop();
+        draw();
+        break;
+      case " ":
+        e.preventDefault();
+        hardDrop();
+        draw();
+        break;
+      case "c":
+      case "C":
+      case "Shift":
+        e.preventDefault();
+        holdPiece();
+        draw();
+        break;
     }
   });
 
-  startBtn.addEventListener('click', () => togglePause());
-  pauseBtn.addEventListener('click', () => togglePause());
-  restartBtn.addEventListener('click', () => {
-    reset();
-    game.state = STATE.READY;
-    showOverlay('Ready?', 'Use <kbd>arrows</kbd> / <kbd>WASD</kbd> to move<br /><kbd>Space</kbd> to pause or restart', 'Start Game', false);
+  startBtn.addEventListener("click", () => {
+    if (state.paused && state.running) {
+      pauseGame();
+    } else {
+      startGame();
+    }
   });
 
-  touchPad.querySelectorAll('.dpad').forEach(btn => {
-    const handler = (e) => {
-      e.preventDefault();
-      if (game.state === STATE.READY || game.state === STATE.OVER) startGame();
-      const map = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-      const dir = map[btn.dataset.dir];
-      setDir(dir[0], dir[1]);
-    };
-    btn.addEventListener('click', handler);
-    btn.addEventListener('touchstart', handler, { passive: false });
+  pauseBtn.addEventListener("click", () => {
+    if (!state.running && !state.paused) {
+      startGame();
+    } else {
+      pauseGame();
+    }
   });
 
-  let tStart = null;
-  const SWIPE_MIN = 22;
-  canvas.addEventListener('touchstart', (e) => {
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    tStart = { x: t.clientX, y: t.clientY };
-  }, { passive: true });
-  canvas.addEventListener('touchend', (e) => {
-    if (!tStart) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - tStart.x;
-    const dy = t.clientY - tStart.y;
-    tStart = null;
-    if (Math.max(Math.abs(dx), Math.abs(dy)) < SWIPE_MIN) return;
-    if (game.state === STATE.READY || game.state === STATE.OVER) startGame();
-    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
-    else setDir(0, dy > 0 ? 1 : -1);
-  }, { passive: true });
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden && game.state === STATE.RUNNING) togglePause();
+  restartBtn.addEventListener("click", () => {
+    startGame();
   });
 
-  fitCanvas();
-  reset();
-  game.state = STATE.READY;
-  game.rafId = requestAnimationFrame(loop);
+  if (touchPad) {
+    const triggers = touchPad.querySelectorAll("[data-action]");
+    triggers.forEach((btn) => {
+      const handler = (e) => {
+        e.preventDefault();
+        if (!state.running || state.paused || state.gameOver) return;
+        const action = btn.dataset.action;
+        if (action === "left") move(-1);
+        else if (action === "right") move(1);
+        else if (action === "rotate") rotate(1);
+        else if (action === "down") softDrop();
+        else if (action === "drop") hardDrop();
+        draw();
+      };
+      btn.addEventListener("touchstart", handler, { passive: false });
+      btn.addEventListener("click", handler);
+    });
+  }
+
+  updateHud();
+  drawNext();
+  drawHold();
+  draw();
+  showOverlay(
+    "READY?",
+    `<kbd>&larr;</kbd> <kbd>&rarr;</kbd> 移动 &nbsp;|&nbsp; <kbd>&uarr;</kbd> 旋转<br /><kbd>&darr;</kbd> 软降 &nbsp;|&nbsp; <kbd>Space</kbd> 硬降<br /><kbd>P</kbd> 暂停 &nbsp;|&nbsp; <kbd>C</kbd> 保留`,
+    "开始游戏",
+    null
+  );
 })();

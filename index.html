@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#0a0e1a" />
-<title>Neon Snake</title>
+<title>Neon Tetris</title>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -12,51 +12,78 @@
     <div class="grid-overlay"></div>
     <div class="glow glow-1"></div>
     <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
   </div>
 
   <main class="game-shell">
     <header class="game-header">
       <h1 class="title">
         <span class="title-neon">NEON</span>
-        <span class="title-snake">SNAKE</span>
+        <span class="title-tetris">TETRIS</span>
       </h1>
-      <div class="scores">
-        <div class="score-card">
-          <span class="score-label">SCORE</span>
-          <span class="score-value" id="score">0</span>
-        </div>
-        <div class="score-card best">
-          <span class="score-label">BEST</span>
-          <span class="score-value" id="highScore">0</span>
-        </div>
-      </div>
     </header>
 
-    <section class="board-wrap">
-      <canvas id="board" width="480" height="480" aria-label="Snake game board"></canvas>
+    <section class="play-area">
+      <aside class="side-panel left-panel">
+        <div class="panel-card">
+          <span class="panel-label">SCORE</span>
+          <span class="panel-value" id="score">0</span>
+        </div>
+        <div class="panel-card">
+          <span class="panel-label">BEST</span>
+          <span class="panel-value" id="highScore">0</span>
+        </div>
+        <div class="panel-card">
+          <span class="panel-label">LEVEL</span>
+          <span class="panel-value" id="level">1</span>
+        </div>
+        <div class="panel-card">
+          <span class="panel-label">LINES</span>
+          <span class="panel-value" id="lines">0</span>
+        </div>
+      </aside>
 
-      <div class="overlay" id="overlay">
-        <div class="overlay-card" id="overlayCard">
-          <h2 class="overlay-title" id="overlayTitle">Ready?</h2>
-          <p class="overlay-text" id="overlayText">
-            Use <kbd>arrows</kbd> / <kbd>WASD</kbd> to move<br />
-            <kbd>Space</kbd> to pause or restart
-          </p>
-          <button class="btn primary" id="startBtn">Start Game</button>
+      <div class="board-wrap">
+        <canvas id="board" width="300" height="600" aria-label="Tetris game board"></canvas>
+
+        <div class="overlay" id="overlay">
+          <div class="overlay-card" id="overlayCard">
+            <h2 class="overlay-title" id="overlayTitle">READY?</h2>
+            <p class="overlay-text" id="overlayText">
+              <kbd>&larr;</kbd> <kbd>&rarr;</kbd> 移动 &nbsp;|&nbsp;
+              <kbd>&uarr;</kbd> 旋转<br />
+              <kbd>&darr;</kbd> 软降 &nbsp;|&nbsp;
+              <kbd>Space</kbd> 硬降<br />
+              <kbd>P</kbd> 暂停
+            </p>
+            <button class="btn primary" id="startBtn">开始游戏</button>
+          </div>
         </div>
       </div>
+
+      <aside class="side-panel right-panel">
+        <div class="panel-card preview-card">
+          <span class="panel-label">NEXT</span>
+          <canvas id="nextCanvas" width="120" height="120"></canvas>
+        </div>
+        <div class="panel-card preview-card">
+          <span class="panel-label">HOLD</span>
+          <canvas id="holdCanvas" width="120" height="120"></canvas>
+        </div>
+      </aside>
     </section>
 
     <footer class="controls">
-      <button class="btn ghost" id="pauseBtn" aria-label="Pause">Pause</button>
-      <button class="btn ghost" id="restartBtn" aria-label="Restart">Restart</button>
+      <button class="btn ghost" id="pauseBtn" aria-label="Pause">暂停</button>
+      <button class="btn ghost" id="restartBtn" aria-label="Restart">重开</button>
     </footer>
 
     <div class="touch-pad" id="touchPad" aria-hidden="true">
-      <button class="dpad up" data-dir="up" aria-label="Up">&#9650;</button>
-      <button class="dpad left" data-dir="left" aria-label="Left">&#9664;</button>
-      <button class="dpad right" data-dir="right" aria-label="Right">&#9654;</button>
-      <button class="dpad down" data-dir="down" aria-label="Down">&#9660;</button>
+      <button class="dpad rotate" data-action="rotate" aria-label="Rotate">&#8634;</button>
+      <button class="dpad left" data-action="left" aria-label="Left">&#9664;</button>
+      <button class="dpad right" data-action="right" aria-label="Right">&#9654;</button>
+      <button class="dpad down" data-action="down" aria-label="Down">&#9660;</button>
+      <button class="dpad drop" data-action="drop" aria-label="Hard Drop">&#11015;</button>
     </div>
   </main>
 
