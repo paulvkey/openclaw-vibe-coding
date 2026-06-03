@@ -750,3 +750,293 @@ Total 估计：~1.5~2.0 mm²（不含 wrapper 与 pad）
 ---
 
 *文档结束*
+
+---
+
+## 16. 接口定义
+
+### 16.1 上游接口（来自 L1 / 互连）
+
+| 信号 | 方向 | 位宽 | 描述 |
+| --- | --- | --- | --- |
+| up_req_valid | in | 1 | 请求有效 |
+| up_req_ready | out | 1 | L2 接受请求 |
+| up_req_id | in | 4 | 请求 ID |
+| up_req_type | in | 3 | Read/Write/Prefetch/Flush/Invalidate |
+| up_req_addr | in | 48 | 物理地址 |
+| up_req_size | in | 3 | 传输 size |
+| up_req_data | in | 512 | 写数据（一行） |
+| up_req_be | in | 64 | 字节使能 |
+| up_resp_valid | out | 1 | 响应有效 |
+| up_resp_ready | in | 1 | 上游接收 |
+| up_resp_id | out | 4 | 对应请求 ID |
+| up_resp_data | out | 512 | 读数据 |
+| up_resp_status | out | 2 | OK/ERR/Retry |
+
+### 16.2 下游 AXI4 主接口
+
+#### 16.2.1 Write Address Channel (AW)
+
+| 信号 | 位宽 | 说明 |
+| --- | --- | --- |
+| AWID | 6 | 写事务 ID |
+| AWADDR | 48 | 写地址 |
+| AWLEN | 8 | burst 长度 |
+| AWSIZE | 3 | beat size |
+| AWBURST | 2 | burst 类型（INCR） |
+| AWCACHE | 4 | 缓存属性 |
+| AWPROT | 3 | 保护类型 |
+| AWVALID | 1 | 有效 |
+| AWREADY | 1 | 接收 |
+
+#### 16.2.2 Write Data Channel (W)
+
+| 信号 | 位宽 | 说明 |
+| --- | --- | --- |
+| WDATA | 256 | 写数据 |
+| WSTRB | 32 | 字节选通 |
+| WLAST | 1 | 末 beat |
+| WVALID | 1 | 有效 |
+| WREADY | 1 | 接收 |
+
+#### 16.2.3 Write Response Channel (B)
+
+| 信号 | 位宽 | 说明 |
+| --- | --- | --- |
+| BID | 6 | 响应 ID |
+| BRESP | 2 | OKAY/EXOKAY/SLVERR/DECERR |
+| BVALID | 1 | 有效 |
+| BREADY | 1 | 接收 |
+
+#### 16.2.4 Read Address Channel (AR)
+
+| 信号 | 位宽 | 说明 |
+| --- | --- | --- |
+| ARID | 6 | 读事务 ID |
+| ARADDR | 48 | 读地址 |
+| ARLEN | 8 | burst 长度 |
+| ARSIZE | 3 | beat size |
+| ARBURST | 2 | burst 类型 |
+| ARVALID | 1 | 有效 |
+| ARREADY | 1 | 接收 |
+
+#### 16.2.5 Read Data Channel (R)
+
+| 信号 | 位宽 | 说明 |
+| --- | --- | --- |
+| RID | 6 | 响应 ID |
+| RDATA | 256 | 读数据 |
+| RRESP | 2 | OKAY/SLVERR |
+| RLAST | 1 | 末 beat |
+| RVALID | 1 | 有效 |
+| RREADY | 1 | 接收 |
+
+### 16.3 监听接口（Snoop / ACE-lite 子集）
+
+| 信号 | 方向 | 位宽 | 说明 |
+| --- | --- | --- | --- |
+| ACVALID | in | 1 | snoop 命令有效 |
+| ACADDR | in | 48 | snoop 地址 |
+| ACSNOOP | in | 4 | snoop 类型 |
+| ACREADY | out | 1 | L2 接收 |
+| CRVALID | out | 1 | snoop 响应有效 |
+| CRRESP | out | 5 | DataTransfer/Error/PassDirty/IsShared/WasUnique |
+| CRREADY | in | 1 |  |
+| CDVALID | out | 1 | snoop 数据有效 |
+| CDDATA | out | 256 | snoop 数据 |
+| CDLAST | out | 1 | 末 beat |
+| CDREADY | in | 1 |  |
+
+### 16.4 配置/调试接口
+
+- APB 寄存器接口：用于使能预取、配置 way 锁定、读取性能计数器。
+- 性能计数器：hit/miss/wb/snoop_hit/prefetch_*。
+
+---
+
+## 17. 性能指标
+
+### 17.1 延迟
+
+| 路径 | 周期数（典型） |
+| --- | --- |
+| L2 hit（流水线满载） | 8~12 cycles |
+| L2 miss → L3 hit | 30~50 cycles |
+| L2 miss → DRAM | 150~250 cycles |
+| Snoop hit invalidate | 6~10 cycles |
+
+### 17.2 带宽
+
+- 数据通路宽度：上游 512 bit/cycle，下游 256 bit/cycle（AXI）。
+- 峰值带宽（@ 2 GHz）：上游 128 GB/s，下游 64 GB/s。
+- 多 bank 设计可同时服务 ≥ 2 请求/周期（命中流）。
+
+### 17.3 性能计数器
+
+提供至少以下事件计数：
+- read_hit / read_miss
+- write_hit / write_miss
+- writeback_count
+- snoop_hit / snoop_miss
+- prefetch_issued / prefetch_useful / prefetch_late
+- mshr_full_stall / vb_full_stall
+- ecc_corrected / ecc_uncorrected
+
+---
+
+## 18. 可配置参数
+
+### 18.1 综合时参数（Compile-time）
+
+| 参数名 | 取值范围 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| L2_SIZE | 256KB / 512KB / 1MB / 2MB | 512KB | 总容量 |
+| ASSOC | 4 / 8 / 16 | 8 | 相联度 |
+| LINE_SIZE | 64 / 128 | 64 | line 大小（B） |
+| NUM_BANKS | 4 / 8 / 16 | 8 | bank 数 |
+| MSHR_NUM | 8 ~ 32 | 16 | 未完成缺失数 |
+| VB_NUM | 4 ~ 16 | 8 | victim buffer entry |
+| WB_NUM | 2 ~ 8 | 4 | write buffer entry |
+| REPLACE_POLICY | RANDOM / NRU / PLRU / DRRIP | PLRU | 替换策略 |
+| COHERENCE | MESI / MOESI | MESI | 一致性协议 |
+| PREFETCH_EN | 0 / 1 | 1 | 预取使能 |
+| ECC_EN | 0 / 1 | 1 | ECC 使能 |
+| PA_WIDTH | 40 ~ 52 | 48 | 物理地址位宽 |
+
+### 18.2 运行时参数（CSR/APB 可写）
+
+- prefetch_aggressiveness（0~3）
+- way_lock_mask（per-set 或全局）
+- snoop_filter_enable
+- performance_counter_enable
+
+---
+
+## 19. 综合与实现考量
+
+### 19.1 时序收敛（Timing Closure）
+
+- Tag RAM 访问 + 比较 + way mux 是关键路径；必要时可拆分为 2 级流水。
+- Data RAM 大宽度读取（512b）可能成为瓶颈，使用 way prediction 预取一路。
+- 跨 bank 仲裁器采用树形结构，降低延迟。
+- 目标频率：先进工艺 1.5~2.5 GHz，成熟工艺 1.0~1.5 GHz。
+
+### 19.2 面积（Area）
+
+- 主要面积来自 SRAM：data RAM ≈ 5~6 mm²（5nm 估算，512KB），tag RAM ≈ 0.5 mm²。
+- 控制逻辑、MSHR、VB、prefetcher 合计 < 0.3 mm²。
+
+### 19.3 功耗（Power）
+
+- 动态：每次访问唤醒一组 SRAM bank，使用 way prediction 避免读取所有 way。
+- 静态：SRAM retention voltage、bank-level power gating（L2 deep sleep）。
+- Tag-only access：snoop 仅访问 tag，降低 data RAM 翻转。
+
+### 19.4 DFT / DFM
+
+- BIST：MBIST 引擎覆盖 tag RAM 与 data RAM。
+- Repair：行/列冗余支持（视库支持）。
+- Scan：full-scan，控制逻辑。
+- Power gating：cluster idle 时整体下电。
+
+---
+
+## 20. 测试与验证策略
+
+### 20.1 验证层次
+
+1. **单元级（Unit-level）**：FSM、MSHR、VB、prefetcher、replacement 单独 testbench。
+2. **子系统级（Sub-system）**：完整 L2 + 模拟 L1 + L3 BFM。
+3. **系统级（System-level）**：多核 SoC 仿真，含一致性场景。
+4. **形式化验证（Formal）**：FSM 死锁、协议合规（MESI 状态转换）、ECC 路径。
+
+### 20.2 验证方法
+
+- **UVM 环境**：scoreboard、predictor、coverage collector。
+- **协议合规**：使用 ARM ACE/AXI 协议检查器。
+- **随机测试**：constrained random，含多核竞争访问、地址冲突、replacement 压力。
+- **方向化测试**：corner case：MSHR 满、VB 满、snoop 与 fill 冲突、ECC 错误注入。
+- **性能回归**：典型 benchmark（SPEC、Stream、Linpack）下命中率/带宽回归。
+
+### 20.3 覆盖率目标
+
+| 类型 | 目标 |
+| --- | --- |
+| 行/分支覆盖 | ≥ 99% |
+| 状态机状态/转换 | 100% |
+| 功能覆盖（cross） | ≥ 95% |
+| 一致性协议 | 100%（所有 MESI 转移） |
+| 接口协议 | 100%（AXI/ACE 检查器无违规） |
+
+### 20.4 错误注入（Fault Injection）
+
+- ECC 单/双比特错误注入。
+- AXI 协议异常（SLVERR、DECERR）注入。
+- Snoop 时序边界注入（背靠背 invalidate）。
+
+---
+
+## 21. 参考文档
+
+1. ARM AMBA AXI and ACE Protocol Specification, IHI 0022.
+2. ARM AMBA APB Protocol Specification, IHI 0024.
+3. Hennessy & Patterson, *Computer Architecture: A Quantitative Approach*, 6th ed., Chapter 5: Memory Hierarchy.
+4. Sweazey & Smith, "A Class of Compatible Cache Consistency Protocols", ISCA 1986（MESI 起源）。
+5. Sorin, Hill & Wood, *A Primer on Memory Consistency and Cache Coherence*, Synthesis Lectures on Computer Architecture, 2nd ed.
+6. Jouppi, "Improving Direct-Mapped Cache Performance by the Addition of a Small Fully-Associative Cache and Prefetch Buffers", ISCA 1990（victim buffer 起源）。
+7. Qureshi et al., "Adaptive Insertion Policies for High Performance Caching", ISCA 2007（DRRIP）。
+8. IEEE Std 1500 / 1149.1（DFT 相关）。
+9. JEDEC JESD79（DRAM 接口约束，影响下游设计）。
+
+---
+
+## 附录 A：参数列表速查
+
+| 参数 | 默认值 |
+| --- | --- |
+| L2_SIZE | 512 KB |
+| ASSOC | 8 |
+| LINE_SIZE | 64 B |
+| NUM_SETS | 1024 |
+| NUM_BANKS | 8 |
+| MSHR_NUM | 16 |
+| VB_NUM | 8 |
+| WB_NUM | 4 |
+| PA_WIDTH | 48 bit |
+| TAG_BITS | 32 |
+| INDEX_BITS | 10 |
+| OFFSET_BITS | 6 |
+| 一致性协议 | MESI |
+| 替换策略 | Tree-PLRU |
+| 写策略 | Write-back + Write-allocate |
+| 总线接口 | AXI4 (256b data) |
+| 命中延迟 | 8~12 cycles |
+
+## 附录 B：缩略语表
+
+| 缩写 | 全称 |
+| --- | --- |
+| L1/L2/L3 | Level-1/2/3 Cache |
+| MSHR | Miss Status Holding Register |
+| VB | Victim Buffer |
+| WB | Write Buffer |
+| FB | Fill Buffer |
+| BIU | Bus Interface Unit |
+| FSM | Finite State Machine |
+| PLRU | Pseudo Least Recently Used |
+| LRU | Least Recently Used |
+| MESI | Modified/Exclusive/Shared/Invalid |
+| MOESI | Modified/Owned/Exclusive/Shared/Invalid |
+| ECC | Error Correcting Code |
+| SECDED | Single Error Correct, Double Error Detect |
+| PA | Physical Address |
+| AXI | Advanced eXtensible Interface |
+| ACE | AXI Coherency Extensions |
+| BIST | Built-In Self Test |
+| DFT | Design For Test |
+| DRRIP | Dynamic Re-Reference Interval Prediction |
+| NRU | Not Recently Used |
+
+---
+
+*— 文档结束 —*
